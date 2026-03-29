@@ -1,0 +1,14 @@
+# R artifacts
+*.Rcheck/
+*.tar.gz
+.Rhistory
+.RData
+.Ruserdata
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp/build
+inst/doc/*.html
+inst/doc/*.R

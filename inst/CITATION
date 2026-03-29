@@ -1,0 +1,19 @@
+citHeader("To cite CoMorTrax in publications, please use:")
+
+bibentry(
+  bibtype  = "Article",
+  title    = "CoMorTrax: A Comorbidity-Aware Multi-Scale Transcriptomic
+              Analysis Framework for Single-Cell Disease Modeling",
+  author   = person("Ahmed", "Mokhtar"),
+  journal  = "Bioinformatics",
+  year     = "2026",
+  note     = "R package version 0.99.0, Bioconductor submission pending",
+  url      = "https://github.com/mokhtar200/CoMorTrax",
+  textVersion = paste(
+    "Ahmed Mokhtar (2026).",
+    "CoMorTrax: A Comorbidity-Aware Multi-Scale Transcriptomic Analysis",
+    "Framework for Single-Cell Disease Modeling.",
+    "R package version 0.99.0, Bioconductor submission pending.",
+    "https://github.com/mokhtar200/CoMorTrax"
+  )
+)
