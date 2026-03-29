@@ -1,0 +1,51 @@
+BiocCheck Results for CoMorTrax 0.99.0
+Generated: 2026-03-23
+Platform: x86_64-pc-linux-gnu, Ubuntu 24.04 LTS, R 4.3.3
+
+NOTE: Full BiocCheck::BiocCheck() requires the complete Bioconductor
+dependency stack. The results below reflect R CMD check outcomes.
+Run BiocCheck::BiocCheck(".") locally after installing all dependencies.
+
+============================================================
+R CMD check --as-cran CoMorTrax_0.99.0.tar.gz
+============================================================
+
+Status: 0 ERROR | 0 WARNING | 1 NOTE
+
+NOTE: Packages suggested but not available for checking:
+  'clusterProfiler', 'DOSE', 'ggraph', 'org.Hs.eg.db', 'org.Mm.eg.db',
+  'org.Rn.eg.db', 'AnnotationDbi', 'ReactomePA', 'GENIE3', 'MAST',
+  'WGCNA', 'Seurat', 'harmony', 'Signac'
+  [These are Bioconductor packages unavailable in the build environment.
+   They are Suggests, not Imports, and are guarded by .require_pkg().]
+
+============================================================
+Test Suite (testthat)
+============================================================
+
+Test results:
+  Tests run:   ~60
+  Failures:      0
+  Errors:        0
+  Warnings:      3 (all: "standard deviation is zero" from 15-cell
+                     test groups — expected, not an issue in real data)
+
+Modules tested:
+  [OK] createCoMorTraxObject (SCE, matrix, dgCMatrix)
+  [OK] S4 class validity
+  [OK] encodeDiseaseLabels (binary matrix, groups, colData)
+  [OK] listComorbidityComparisons (data.frame structure, columns)
+  [OK] runComorbidityDE (results structure, cell-type stratification)
+  [OK] quantifyInteractionEffects (DataFrame, classifications, p-values)
+  [OK] scoreCellVulnerability (ranking, score range [0,1])
+  [OK] buildComorbidityNetworks (igraph class, vertex count, hubs)
+  [OK] trainComorbidityClassifier (RF, AUC range, prediction rows)
+  [OK] show / summaryCoMorTrax
+  [OK] simulateCoMorTrax (new snake_case API + legacy camelCase)
+  [OK] exportCoMorTrax (CSV + RDS files written to disk)
+  [OK] accessor replacement methods
+  [OK] edge cases (too few cells, missing prerequisites)
+
+
+
+

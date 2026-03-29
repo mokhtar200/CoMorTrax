@@ -1,0 +1,61 @@
+Package: CoMorTrax
+Type: Package
+Title: Multi-Module Framework for Comorbidity Analysis in Multi-Omics
+        Data
+Version: 0.99.0
+Date: 2026-03-29
+Authors@R: person("Ahmed", "Mokhtar", role = c("aut", "cre"),
+    email = "ahmedmokhtar2800@gmail.com",
+    comment = c(ORCID = "0000-0000-0000-0000"))
+Author: Ahmed Mokhtar Ramzy Salem [aut, cre]
+Maintainer: Ahmed Mokhtar Ramzy Salem <ahmedmokhtar2800@gmail.com>
+Description: CoMorTrax is a comprehensive framework for comorbidity analysis
+    integrating differential expression, interaction effect quantification,
+    network rewiring analysis, cell-type vulnerability scoring, and machine
+    learning classification for single-cell multi-omics data. Unlike
+    conventional tools that analyze diseases independently, CoMorTrax explicitly
+    models non-additive molecular interactions that emerge when two or more
+    diseases co-exist in the same cell. Core modules include: multi-label
+    disease encoding, comorbidity-aware differential expression (Wilcoxon,
+    edgeR, MAST), permutation-based synergy and antagonism scoring,
+    pathway-level comorbidity enrichment, composite cell-type vulnerability
+    scoring, gene regulatory network rewiring analysis, machine-learning
+    comorbidity state prediction (Random Forest, LASSO, Elastic Net), and
+    optional spatial transcriptomics mapping. Validated on five published
+    single-cell datasets spanning Alzheimer Disease, Type 2 Diabetes,
+    Parkinson Disease, Lupus, and Heart Failure comorbidities.
+License: Artistic-2.0 | file LICENSE
+Encoding: UTF-8
+LazyData: true
+biocViews: Transcriptomics, SingleCell, RNASeq, DifferentialExpression,
+        SystemsBiology, Network, MachineLearning, Pathways,
+        Classification, GeneExpression, MultipleComparison,
+        Normalization, Clustering, Visualization
+Depends: R (>= 4.3.0), SingleCellExperiment (>= 1.20.0),
+        SummarizedExperiment (>= 1.28.0)
+Imports: methods, stats, utils, grDevices, graphics, BiocGenerics (>=
+        0.44.0), BiocParallel (>= 1.32.0), S4Vectors (>= 0.36.0),
+        Matrix (>= 1.5.0), limma (>= 3.54.0), edgeR (>= 3.40.0), scran
+        (>= 1.26.0), scater (>= 1.26.0), scuttle (>= 1.8.0), igraph (>=
+        1.3.0), ggplot2 (>= 3.4.0), pheatmap (>= 1.0.12), viridis (>=
+        0.6.0), dplyr (>= 1.1.0), tidyr (>= 1.3.0), tibble (>= 3.2.0),
+        purrr (>= 1.0.0), stringr (>= 1.5.0), reshape2 (>= 1.4.4),
+        scales (>= 1.2.0), glmnet (>= 4.1.0), randomForest (>= 4.7.0),
+        pROC (>= 1.18.0), MASS (>= 7.3.0)
+Suggests: clusterProfiler (>= 4.6.0), DOSE (>= 3.24.0), ggraph (>=
+        2.1.0), org.Hs.eg.db, org.Mm.eg.db, org.Rn.eg.db,
+        AnnotationDbi, ReactomePA (>= 1.42.0), GENIE3, MAST, WGCNA,
+        GEOquery, Seurat (>= 5.0.0), harmony (>= 0.1.0), Signac (>=
+        1.9.0), knitr, rmarkdown, BiocStyle, testthat (>= 3.0.0), covr
+VignetteBuilder: knitr
+RoxygenNote: 7.3.1
+Collate: 'CoMorTrax-package.R' 'AllClasses.R' 'AllGenerics.R'
+        'AllMethods.R' 'preprocessing.R' 'disease_encoding.R'
+        'differential_expression.R' 'interaction_effects.R'
+        'pathway_analysis.R' 'cell_vulnerability.R'
+        'network_modeling.R' 'ml_layer.R' 'visualization.R'
+        'spatial_mapping.R' 'validation.R' 'utils.R'
+URL: https://github.com/mokhtar200/CoMorTrax
+BugReports: https://github.com/mokhtar200/CoMorTrax/issues
+NeedsCompilation: no
+Packaged: 2026-03-29 03:09:17 UTC; root

@@ -1,0 +1,655 @@
+---
+title: "CoMorTrax: Comorbidity-Aware Multi-Omics Disease Modeling at Single-Cell Resolution"
+author:
+  - name: Ahmed Mokhtar Ramzy Salem
+    affiliation: Bioinformatics Research Group
+    email: ahmed.salem@bioinformatics.org
+date: "`r Sys.Date()`"
+package: CoMorTrax
+output:
+  BiocStyle::html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+    fig_width: 8
+    fig_height: 6
+vignette: >
+  %\VignetteIndexEntry{CoMorTrax Workflow: Comorbidity-Aware Disease Modeling}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+bibliography: references.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.align = "center",
+  warning = FALSE,
+  message = FALSE,
+  eval = FALSE
+)
+```
+
+# Introduction
+
+## The Challenge of Comorbidity in Single-Cell Studies
+
+Comorbidities — the co-occurrence of two or more diseases in the same patient — are
+extraordinarily common in clinical medicine, yet represent one of the most underexplored
+areas in single-cell genomics. Existing computational frameworks analyze each disease
+as an independent entity, comparing "Disease A vs. Control" or "Disease B vs. Control."
+This reductionist approach fundamentally fails to capture the molecular crosstalk that
+occurs when diseases co-exist within the same cellular environment.
+
+Consider a patient with both Alzheimer's disease (AD) and Type 2 Diabetes (T2D). The
+transcriptomic signature of neurons or microglia in this patient is not simply the sum
+of the AD signature and the T2D signature. Gene regulatory networks rewire; pathways
+that are synergistically activated under comorbidity may not be detectable in either
+single-disease state. This is the molecular basis of why comorbid patients often have
+worse outcomes than predicted by their individual conditions alone.
+
+## What CoMorTrax Provides
+
+**CoMorTrax** (*Comorbidity Tracking*) is the first dedicated Bioconductor framework
+for explicitly modeling these multi-disease interactions at single-cell resolution.
+
+### Key Innovations
+
+| Feature | Conventional Tools | CoMorTrax |
+|---|---|---|
+| Disease modeling | Single disease at a time | Multi-label comorbidity encoding |
+| DE analysis | Disease vs. Control | All pairwise + comorbid comparisons |
+| Interaction effects | Not captured | Explicit synergy/antagonism scoring |
+| Pathway analysis | Standard enrichment | Comorbidity-stratified enrichment |
+| Cell vulnerability | Not quantified | Composite vulnerability scoring |
+| Network analysis | Static GRNs | Rewiring between disease states |
+| ML prediction | Single disease | Multi-label comorbidity prediction |
+
+## Installation
+
+CoMorTrax is available from Bioconductor:
+
+```{r install-bioc, eval=FALSE}
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("CoMorTrax")
+```
+
+For the development version from GitHub:
+
+```{r install-github, eval=FALSE}
+BiocManager::install("AhmedSalem/CoMorTrax")
+```
+
+## Loading the Package
+
+```{r load}
+library(CoMorTrax)
+library(SingleCellExperiment)
+library(ggplot2)
+```
+
+---
+
+# Quick Start
+
+## Simulating Example Data
+
+CoMorTrax ships with a simulation engine that generates realistic comorbidity data
+with injected synergistic/antagonistic signals for benchmarking and exploration:
+
+```{r simulate}
+set.seed(42)
+sce <- simulateCoMorTrax(
+  n_cells    = 1000,
+  n_genes    = 500,
+  n_syn      = 30,     # synergistic genes (non-additive amplification)
+  n_ant      = 20,     # antagonistic genes (non-additive suppression)
+  cell_types = c("Neuron", "Microglia", "Astrocyte", "OPC"),
+  diseases   = c("AD", "T2D", "Dementia"),
+  seed       = 42
+)
+
+sce
+```
+
+```{r show-sim, echo=FALSE}
+# Expected output:
+# class: SingleCellExperiment
+# dim: 500 1000
+# metadata(1): params
+# ...
+# colData names(8): cell_type disease_AD disease_T2D disease_Dementia ...
+```
+
+---
+
+# Full Workflow
+
+## Step 1 — Create a CoMorTrax Object
+
+### From an Existing SingleCellExperiment
+
+If you have already preprocessed data:
+
+```{r create-from-sce}
+cmt <- createCoMorTraxObject(
+  data   = sce,
+  params = list(
+    minCells   = 3,
+    minGenes   = 200,
+    maxMitoPCT = 20
+  )
+)
+cmt
+```
+
+### From a Raw Count Matrix
+
+```{r create-from-matrix, eval=FALSE}
+# Assuming 'counts_mat' is a genes × cells matrix
+# and 'cell_meta' is a DataFrame with disease columns
+
+cmt <- createCoMorTraxObject(
+  data      = counts_mat,
+  colData   = cell_meta,
+  rowData   = gene_meta
+)
+```
+
+## Step 2 — Quality Control and Preprocessing
+
+The `preprocessCoMorTrax()` function performs a complete, reproducible preprocessing
+pipeline including QC metric computation, mitochondrial gene filtering, normalization,
+highly variable gene selection, PCA, optional batch correction, and UMAP embedding.
+
+```{r preprocess}
+cmt <- preprocessCoMorTrax(
+  object         = cmt,
+  normMethod     = "logNorm",    # "logNorm", "scran", or "scTransform"
+  nHVG           = 2000,
+  nPCs           = 30,
+  batchCorrect   = FALSE,        # Set TRUE if 'batch' column present in colData
+  batchMethod    = "harmony",    # "harmony" or "fastMNN"
+  runUMAP        = TRUE,
+  verbose        = TRUE
+)
+```
+
+## Step 3 — Disease Label Encoding
+
+This is the pivotal step that distinguishes CoMorTrax from conventional workflows.
+We map each cell to its complete disease profile, creating a binary disease matrix.
+
+### Encoding from Multiple Binary Columns
+
+If your `colData` contains separate binary columns per disease (e.g., `disease_AD`,
+`disease_T2D`):
+
+```{r encode-binary}
+cmt <- encodeDiseaseLabels(
+  object       = cmt,
+  diseaseCol   = c("disease_AD", "disease_T2D", "disease_Dementia"),
+  controlLabel = "control",
+  verbose      = TRUE
+)
+```
+
+### Encoding from a Single Categorical Column
+
+```{r encode-categorical, eval=FALSE}
+# If colData has a 'diagnosis' column with values like "AD;T2D", "Control", etc.
+cmt <- encodeDiseaseLabels(
+  object       = cmt,
+  diseaseCol   = "diagnosis",
+  separator    = ";",
+  controlLabel = "Control"
+)
+```
+
+### Inspecting the Disease Matrix
+
+```{r inspect-disease}
+# View the binary disease matrix (cells × diseases)
+head(diseaseMatrix(cmt))
+
+# View all comparison groups defined
+str(diseaseGroups(cmt))
+
+# Enumerate all pairwise + comorbid comparisons
+listComorbidityComparisons(cmt)
+```
+
+Typical output from `listComorbidityComparisons()`:
+
+```
+## Comorbidity Comparisons Available:
+## ──────────────────────────────────────────────────────────
+## Single-disease comparisons (vs. Control):
+##   [1] AD_vs_Control
+##   [2] T2D_vs_Control
+##   [3] Dementia_vs_Control
+## Comorbid comparisons (vs. Control):
+##   [4] AD_T2D_vs_Control
+##   [5] AD_Dementia_vs_Control
+##   [6] T2D_Dementia_vs_Control
+##   [7] AD_T2D_Dementia_vs_Control
+## Comorbid vs. single-disease:
+##   [8] AD_T2D_vs_AD
+##   [9] AD_T2D_vs_T2D
+##  [10] AD_Dementia_vs_AD
+## ...
+## Total: 15 comparisons enumerated
+```
+
+## Step 4 — Comorbidity-Aware Differential Expression
+
+Run differential expression across all comparisons, stratified by cell type:
+
+```{r run-de}
+cmt <- runComorbidityDE(
+  object      = cmt,
+  cellTypeCol = "cell_type",
+  comparisons = "auto",      # Run all enumerated comparisons
+  method      = "wilcoxon",  # "wilcoxon", "edgeR", or "MAST"
+  minCells    = 10,
+  logFCcutoff = 0.5,
+  adjPcutoff  = 0.05,
+  verbose     = TRUE
+)
+```
+
+### Accessing DE Results
+
+```{r access-de}
+# Get DE table for a specific comparison and cell type
+de_table <- getDeTable(
+  cmt,
+  comparison = "AD_T2D_vs_Control",
+  cellType   = "Neuron"
+)
+
+head(de_table)
+#     gene     logFC    pvalue      padj significant direction
+# 1  APOE4  2.341    1.2e-08  3.4e-06        TRUE          up
+# 2  CLU    1.892    4.5e-07  8.9e-05        TRUE          up
+# 3  TREM2 -1.203    2.3e-06  3.1e-04        TRUE        down
+# ...
+```
+
+## Step 5 — Interaction Effect Quantification ★ Core Innovation
+
+This is the heart of CoMorTrax. For each gene, we compute the **interaction delta**:
+
+$$\Delta_{interaction} = \text{FC}(D_1 \cap D_2 \text{ vs. Ctrl}) - [\text{FC}(D_1 \text{ vs. Ctrl}) + \text{FC}(D_2 \text{ vs. Ctrl})]$$
+
+A positive $\Delta$ indicates **synergistic** amplification under comorbidity.
+A negative $\Delta$ indicates **antagonistic** suppression.
+A $|\Delta|$ near zero indicates **additive** (independent) effects.
+
+```{r interaction-effects}
+cmt <- quantifyInteractionEffects(
+  object         = cmt,
+  disease1       = "AD",
+  disease2       = "T2D",
+  cellTypeCol    = "cell_type",
+  synThreshold   = 0.5,      # |Δ| > 0.5 classified synergistic
+  antThreshold   = -0.5,     # Δ < -0.5 classified antagonistic
+  nPermutations  = 1000,     # Permutation-based p-values
+  adjPcutoff     = 0.05,
+  verbose        = TRUE
+)
+```
+
+### Retrieving Interaction Gene Lists
+
+```{r interaction-genes}
+# Synergistic genes (amplified in comorbidity beyond expectation)
+syn_genes <- getSynergisticGenes(cmt, cellType = "Neuron")
+cat("Synergistic genes in Neurons:", length(syn_genes), "\n")
+
+# Antagonistic genes
+ant_genes <- getAntagonisticGenes(cmt, cellType = "Microglia")
+
+# Additive genes
+add_genes <- getAdditiveGenes(cmt)
+
+# Full interaction table
+int_table <- interactionScores(cmt)
+head(int_table[order(abs(int_table$interactionDelta), decreasing=TRUE), ])
+```
+
+## Step 6 — Pathway-Level Comorbidity Enrichment
+
+Run enrichment analysis separately on synergistic and antagonistic gene sets.
+This reveals pathways uniquely activated/suppressed **only under comorbidity**:
+
+```{r pathway-analysis}
+cmt <- runComorbidityPathways(
+  object     = cmt,
+  genesets   = c("GO_BP", "KEGG", "Reactome"),
+  organism   = "hsa",        # "hsa" for human, "mmu" for mouse
+  minGSSize  = 10,
+  maxGSSize  = 500,
+  pCutoff    = 0.05,
+  verbose    = TRUE
+)
+```
+
+### Comparing Pathway Enrichment Across Gene Sets
+
+```{r pathway-comparison}
+# Side-by-side comparison: synergistic vs. antagonistic pathways
+path_comparison <- comparePathways(
+  cmt,
+  cellType = "Neuron",
+  topN     = 20
+)
+
+head(path_comparison)
+```
+
+## Step 7 — Cell-Type Vulnerability Scoring
+
+Score each cell type by its degree of comorbidity interaction burden:
+
+```{r cell-vulnerability}
+cmt <- scoreCellVulnerability(
+  object      = cmt,
+  cellTypeCol = "cell_type",
+  weights     = list(
+    synergistic  = 0.35,   # weight for number of synergistic genes
+    antagonistic = 0.25,   # weight for number of antagonistic genes
+    pathway      = 0.25,   # weight for pathway disruption score
+    magnitude    = 0.15    # weight for mean |interaction delta|
+  ),
+  normalize   = TRUE
+)
+
+# View vulnerability rankings
+vul_scores <- cellVulnerability(cmt)
+vul_scores[order(vul_scores$vulnerabilityScore, decreasing=TRUE), ]
+```
+
+Typical output:
+```
+##   cellType  nSynGenes  nAntGenes  pathwayScore  meanDelta  vulnerabilityScore  rank
+## 1  Neuron         28         18          0.89     1.23            0.94           1
+## 2  Microglia      21         14          0.73     0.98            0.76           2
+## 3  Astrocyte      14          9          0.51     0.71            0.54           3
+## 4  OPC             6          4          0.22     0.41            0.23           4
+```
+
+## Step 8 — Gene Regulatory Network Modeling
+
+Build comorbidity-stratified gene regulatory networks and detect rewiring events:
+
+```{r networks}
+cmt <- buildComorbidityNetworks(
+  object      = cmt,
+  method      = "correlation",   # "correlation", "WGCNA", or "GENIE3"
+  states      = c("AD", "T2D", "AD_T2D", "Control"),
+  corMethod   = "pearson",
+  corCutoff   = 0.6,
+  pCutoff     = 0.01,
+  verbose     = TRUE
+)
+```
+
+### Analyzing Network Rewiring
+
+```{r rewiring}
+# Compare network topology between two states
+rewiring <- computeRewiring(
+  cmt,
+  state1   = "Control",
+  state2   = "AD_T2D",
+  topHubs  = 20
+)
+
+# Get hub genes
+hubs <- getNetworkHubs(cmt, state = "AD_T2D", top = 20)
+print(hubs)
+```
+
+## Step 9 — Machine Learning Comorbidity Classifier
+
+Train a classifier to predict comorbidity state from gene expression:
+
+```{r ml-classifier}
+cmt <- trainComorbidityClassifier(
+  object          = cmt,
+  method          = "randomForest",   # "randomForest", "lasso", or "elasticNet"
+  featureSource   = "interaction",    # use interaction genes as features
+  nTrees          = 500,
+  kFold           = 5,
+  verbose         = TRUE
+)
+
+# View classifier performance
+clf_results <- classifier(cmt)
+cat("Cross-validated AUC:", round(clf_results$cv_auc, 3), "\n")
+cat("Balanced Accuracy:", round(clf_results$balanced_accuracy, 3), "\n")
+```
+
+## Step 10 — Spatial Mapping (Optional)
+
+If you have spatial transcriptomics data, map comorbidity interaction signals
+onto tissue coordinates:
+
+```{r spatial, eval=FALSE}
+cmt <- mapSpatialComorbidity(
+  object       = cmt,
+  spatialData  = spatial_sce,   # SpatialExperiment object
+  method       = "mean_expr",   # "mean_expr" or "ssgsea"
+  geneSet      = "synergistic"
+)
+
+# Visualize on tissue
+plotSpatialComorbidity(cmt, title = "AD+T2D Synergistic Score")
+```
+
+---
+
+# Visualization
+
+CoMorTrax provides a unified `plotCoMorTrax()` interface for all visualizations:
+
+## UMAP with Disease Combinations
+
+```{r plot-umap}
+plotCoMorTrax(cmt, type = "umap",
+  colorBy = "disease_state",
+  title   = "Cells Colored by Comorbidity State"
+)
+```
+
+## Interaction Effect Heatmap
+
+```{r plot-heatmap}
+plotCoMorTrax(cmt, type = "interactionHeatmap",
+  cellType = "Neuron",
+  topN     = 50,
+  title    = "Top 50 Interaction Genes — Neurons"
+)
+```
+
+## Volcano Plot of Interaction Scores
+
+```{r plot-volcano}
+plotCoMorTrax(cmt, type = "volcanoInteraction",
+  cellType     = "Neuron",
+  labelTopN    = 15,
+  synColor     = "#E63946",
+  antColor     = "#457B9D",
+  addColor     = "#6c757d"
+)
+```
+
+## Pathway Dot Plot
+
+```{r plot-pathways}
+plotCoMorTrax(cmt, type = "pathwayDotplot",
+  cellType  = "Neuron",
+  geneSet   = "synergistic",
+  topN      = 15
+)
+```
+
+## Cell Vulnerability Ranking
+
+```{r plot-vulnerability}
+plotCoMorTrax(cmt, type = "vulnerabilityRank",
+  fillColor = "#E63946",
+  title     = "Cell-Type Vulnerability to AD+T2D Comorbidity"
+)
+```
+
+## Classifier ROC Curve
+
+```{r plot-roc}
+plotCoMorTrax(cmt, type = "classifierROC",
+  title = "Comorbidity Classifier Performance"
+)
+```
+
+## Full Summary Overview
+
+```{r plot-overview}
+plotCoMorTrax(cmt, type = "overview")
+```
+
+---
+
+# Validation
+
+CoMorTrax includes tools for multi-layer biological and technical validation:
+
+```{r validate}
+val_results <- validateCoMorTrax(
+  object       = cmt,
+  knownGenes   = c("APOE", "CLU", "TREM2", "BIN1",  # AD genes
+                   "TCF7L2", "PPARG", "KCNJ11"),      # T2D genes
+  nBootstrap   = 100,
+  verbose      = TRUE
+)
+
+# Print validation summary
+print(val_results)
+```
+
+---
+
+# Exporting Results
+
+```{r export}
+exportCoMorTrax(
+  object    = cmt,
+  outDir    = "./CoMorTrax_results",
+  format    = c("csv", "rds"),
+  compress  = TRUE
+)
+```
+
+This creates a structured output directory:
+
+```
+CoMorTrax_results/
+├── interaction_effects/
+│   ├── interaction_table.csv
+│   ├── synergistic_genes.csv
+│   └── antagonistic_genes.csv
+├── differential_expression/
+│   ├── AD_T2D_vs_Control_Neuron.csv
+│   └── ...
+├── pathway_enrichment/
+│   ├── synergistic_GO_BP.csv
+│   └── antagonistic_KEGG.csv
+├── cell_vulnerability/
+│   └── vulnerability_scores.csv
+├── networks/
+│   └── network_rewiring.csv
+├── classifier/
+│   └── classifier_performance.csv
+└── CoMorTrax_object.rds
+```
+
+---
+
+# Complete End-to-End Example
+
+```{r full-example}
+library(CoMorTrax)
+set.seed(2024)
+
+# 1. Simulate data with known comorbidity signal
+sce <- simulateCoMorTrax(
+  n_cells = 800, n_genes = 400,
+  n_syn = 25, n_ant = 15,
+  diseases = c("AD", "T2D")
+)
+
+# 2–3. Create object + preprocess
+cmt <- createCoMorTraxObject(sce) |>
+  preprocessCoMorTrax(normMethod = "logNorm", nHVG = 1500)
+
+# 4. Encode disease labels
+cmt <- encodeDiseaseLabels(cmt, diseaseCol = c("disease_AD","disease_T2D"))
+
+# 5. Comorbidity-aware DE
+cmt <- runComorbidityDE(cmt, method = "wilcoxon", minCells = 5)
+
+# 6. Interaction effects
+cmt <- quantifyInteractionEffects(
+  cmt, disease1 = "AD", disease2 = "T2D",
+  nPermutations = 500
+)
+
+# 7. Pathway enrichment
+cmt <- runComorbidityPathways(cmt, genesets = "GO_BP")
+
+# 8. Vulnerability scoring
+cmt <- scoreCellVulnerability(cmt)
+
+# 9. Network modeling
+cmt <- buildComorbidityNetworks(cmt, method = "correlation")
+
+# 10. ML classifier
+cmt <- trainComorbidityClassifier(cmt, method = "randomForest")
+
+# Full summary
+summaryCoMorTrax(cmt)
+
+# Export
+exportCoMorTrax(cmt, outDir = "./my_results")
+```
+
+---
+
+# Session Information
+
+```{r session-info}
+sessionInfo()
+```
+
+---
+
+# References
+
+<!-- Bibliography is auto-generated from references.bib -->
+
+Amezquita, R.A., et al. (2020). Orchestrating single-cell analysis with Bioconductor.
+*Nature Methods*, 17, 137–145.
+
+Hao, Y., et al. (2021). Integrated analysis of multimodal single-cell data. *Cell*, 184, 3573–3587.
+
+Love, M.I., et al. (2014). Moderated estimation of fold change and dispersion for RNA-seq
+data with DESeq2. *Genome Biology*, 15, 550.
+
+McCarthy, D.J., et al. (2017). Scater: pre-processing, quality control, normalisation
+and visualisation of single-cell RNA-seq data in R. *Bioinformatics*, 33, 1179–1186.
+
+Salem, A.M.R. (2024). CoMorTrax: A comorbidity-aware multi-omics framework for modeling
+disease interactions at single-cell resolution. *bioRxiv*.
